@@ -12,7 +12,7 @@ import re
 import sys
 from collections import Counter
 
-from mdlib import (Slugger, md_files, page_markers, read, split_front_matter,
+from mdlib import (link_errors, md_files, page_markers, read, split_front_matter,
                    strip_inline_md)
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -119,38 +119,12 @@ if os.path.isdir(words):
           f"the book states 875 approved / 1274 not approved words")
 
 # ---- links
-anchors = {}
-
-
-def anchors_of(path):
-    if path not in anchors:
-        s, out = Slugger(), set()
-        fence = False
-        for line in read(path).splitlines():
-            if line.lstrip().startswith("```"):
-                fence = not fence
-            m = None if fence else re.match(r"(#{1,6}) (.*)", line)
-            if m:
-                out.add(s.slug(strip_inline_md(m.group(2))))
-        anchors[path] = out
-    return anchors[path]
-
-
-for p in files:
-    for m in re.finditer(r"\]\(([^)\s]+)\)", read(p)):
-        target = m.group(1)
-        if re.match(r"[a-z]+:", target):
-            continue
-        file_part, _, frag = target.partition("#")
-        dest = os.path.normpath(os.path.join(os.path.dirname(p), file_part)) if file_part else p
-        if not os.path.exists(dest):
-            err(f"{relp(p)}: broken link {target}")
-        elif frag and dest.endswith(".md") and frag not in anchors_of(dest):
-            err(f"{relp(p)}: missing anchor {target}")
+for m in link_errors(files, relp):
+    err(m)
 
 latest = os.path.join(REPO, "latest")
-if not (os.path.islink(latest) and os.path.realpath(latest) == os.path.realpath(ROOT)):
-    err("latest symlink does not point at the issue directory")
+if not (os.path.islink(latest) and os.path.isfile(os.path.join(latest, "README.md"))):
+    err("latest is not a symlink to a folder with a README.md")
 
 for w in warnings:
     print("WARN ", w)

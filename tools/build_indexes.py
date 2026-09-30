@@ -19,7 +19,7 @@ import os
 import re
 import sys
 
-from mdlib import (Slugger, front_matter_field, md_files, page_markers, read,
+from mdlib import (Slugger, front_matter_field, md_files, page_markers, read, rule_statement,
                    split_front_matter, strip_inline_md, write)
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -59,21 +59,7 @@ def load_rules():
         gr = front_matter_field(fm, "gr")
         label = f"Rule {rid}" if rid else gr
         key = tuple(int(x) for x in re.findall(r"\d+", rid)) if rid else (9, 100 + int(re.findall(r"\d+", gr)[0]))
-        box = []
-        for line in body.splitlines():
-            if line.startswith(">"):
-                box.append(line.lstrip("> ").strip())
-            elif box:
-                break
-        parts = []
-        for b in box:
-            if b.startswith("- ") and parts:
-                sep = " " if strip_inline_md(parts[-1]).endswith(":") else "; "
-                parts[-1] += sep + b[2:]
-            else:
-                parts.append(b)
-        statement = strip_inline_md(" ".join(parts))
-        statement = re.sub(rf"^{re.escape(label)}\s*", "", statement)
+        statement = rule_statement(body, label)
         rules.append(dict(path=path, id=rid or gr, label=label, key=key, statement=statement,
                           topic=front_matter_field(fm, "topic") or ""))
     return sorted(rules, key=lambda r: r["key"])

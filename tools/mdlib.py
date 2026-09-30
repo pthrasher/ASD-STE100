@@ -100,3 +100,55 @@ def md_files(root):
         for f in sorted(files):
             if f.endswith(".md"):
                 yield os.path.join(d, f)
+
+
+def rule_statement(body, label):
+    """Plain text of the rule box (the first block quote) of a rule page, without its label."""
+    box = []
+    for line in body.splitlines():
+        if line.startswith(">"):
+            box.append(line.lstrip("> ").strip())
+        elif box:
+            break
+    parts = []
+    for b in box:
+        if b.startswith("- ") and parts:
+            sep = " " if strip_inline_md(parts[-1]).endswith(":") else "; "
+            parts[-1] += sep + b[2:]
+        else:
+            parts.append(b)
+    statement = strip_inline_md(" ".join(parts))
+    return re.sub(rf"^{re.escape(label)}\s*", "", statement)
+
+
+def heading_anchors(path, _cache={}):
+    """The GitHub anchors of the headings in a markdown file (code fences ignored)."""
+    if path not in _cache:
+        s, out, fence = Slugger(), set(), False
+        for line in read(path).splitlines():
+            if line.lstrip().startswith("```"):
+                fence = not fence
+            m = None if fence else re.match(r"(#{1,6}) (.*)", line)
+            if m:
+                out.add(s.slug(strip_inline_md(m.group(2))))
+        _cache[path] = out
+    return _cache[path]
+
+
+def link_errors(files, relp):
+    """Messages for relative markdown links whose file or anchor does not exist."""
+    out = []
+    for p in files:
+        text = re.sub(r"^(\s*)(```|~~~).*?^\1\2[^\n]*$", "", read(p), flags=re.M | re.S)
+        text = re.sub(r"(`+)[^`\n]*?\1", "", text)
+        for m in re.finditer(r"\]\(([^)\s]+)\)", text):
+            target = m.group(1)
+            if re.match(r"[a-z]+:", target):
+                continue
+            file_part, _, frag = target.partition("#")
+            dest = os.path.normpath(os.path.join(os.path.dirname(p), file_part)) if file_part else p
+            if not os.path.exists(dest):
+                out.append(f"{relp(p)}: broken link {target}")
+            elif frag and dest.endswith(".md") and frag not in heading_anchors(dest):
+                out.append(f"{relp(p)}: missing anchor {target}")
+    return out
